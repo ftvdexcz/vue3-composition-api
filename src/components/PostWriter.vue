@@ -1,14 +1,41 @@
 <script setup lang="ts">
 import { TimelinePost } from '../posts';
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, watch } from 'vue';
+import { marked } from 'marked';
+import highlightjs from 'highlight.js';
+import debounce from 'lodash/debounce';
+import { usePosts } from '../stores/posts';
+
+const postsStore = usePosts();
 
 const props = defineProps<{
   post: TimelinePost;
 }>();
 
 const title = ref(props.post.title);
-const contentEditable = ref();
+const contentEditable = ref<HTMLDivElement>();
 const content = ref(props.post.markdown);
+const html = ref('');
+
+const parseHtml = (markdown: string) => {
+  html.value = marked.parse(markdown, {
+    gfm: true,
+    breaks: true,
+    highlight: (code) => {
+      return highlightjs.highlightAuto(code).value;
+    },
+  });
+};
+
+watch(
+  content,
+  debounce((newContent) => {
+    parseHtml(newContent);
+  }, 250),
+  {
+    immediate: true,
+  }
+);
 
 onMounted(() => {
   if (!contentEditable.value) {
@@ -23,6 +50,17 @@ const handleInput = () => {
   }
 
   content.value = contentEditable.value.innerText;
+};
+
+const handleClick = () => {
+  const newPost: TimelinePost = {
+    ...props.post,
+    title: title.value,
+    markdown: content.value,
+    html: html.value,
+  };
+
+  postsStore.createPost(newPost);
 };
 </script>
 
@@ -43,7 +81,15 @@ const handleInput = () => {
       <div contenteditable ref="contentEditable" @input="handleInput" />
     </div>
     <div class="column">
-      {{ content }}
+      <div v-html="html"></div>
+    </div>
+  </div>
+
+  <div class="columns">
+    <div class="column">
+      <button @click="handleClick" class="button is-primary is-pulled-right">
+        Save post
+      </button>
     </div>
   </div>
 </template>
